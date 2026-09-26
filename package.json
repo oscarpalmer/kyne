@@ -1,0 +1,56 @@
+{
+	"name": "@oscarpalmer/kyne",
+	"version": "0.1.0",
+	"description": "Something to help find your way?",
+	"keywords": [],
+	"license": "MIT",
+	"author": {
+		"name": "Oscar Palmér",
+		"url": "https://oscarpalmer.se"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/oscarpalmer/kyne.git"
+	},
+	"files": [
+		"dist"
+	],
+	"type": "module",
+	"module": "./dist/index.mjs",
+	"types": "./dist/index.d.mts",
+	"exports": {
+		"./package.json": "./package.json",
+		".": {
+			"types": "./dist/index.d.mts",
+			"default": "./dist/index.mjs"
+		}
+	},
+	"scripts": {
+		"build": "vpx vp run tsdown:build && vpx vp pack",
+		"tsdown:build": "vpx tsdown -c ./tsdown.config.ts",
+		"tsdown:watch": "vpx tsdown -c ./tsdown.config.ts --watch",
+		"test": "npx vp test run --coverage",
+		"test:leak": "vpx vp test run --detect-async-leaks --coverage"
+	},
+	"dependencies": {},
+	"devDependencies": {
+		"@types/node": "^26.6",
+		"@vitest/coverage-istanbul": "5.0.1",
+		"jsdom": "^30.1",
+		"typescript": "^6",
+		"vite": "npm:@voidzero-dev/vite-plus-core@1.0.0-rc.1",
+		"vite-plus": "1.0.0-rc.1",
+		"vitest": "5.0.1"
+	},
+	"overrides": {
+		"vite": "npm:@voidzero-dev/vite-plus-core@1.0.0-rc.1",
+		"vitest": "5.0.1"
+	},
+	"devEngines": {
+		"packageManager": {
+			"name": "npm",
+			"version": "11.19.1",
+			"onFail": "download"
+		}
+	}
+}
