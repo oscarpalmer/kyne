@@ -22,4 +22,9 @@ export default defineConfig({
 	entry: './src/index.ts',
 	ignoreWatch: ['./dist/*'],
 	minify: 'dce-only',
+	treeshake: {
+		// Temporary workaround until my other package properly declares side effects
+		// Neither package declares `sideEffects: false`, so treat them as pure
+		moduleSideEffects: id => !id.includes('@oscarpalmer'),
+	},
 });

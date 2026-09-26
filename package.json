@@ -1,6 +1,6 @@
 {
 	"name": "@oscarpalmer/kyne",
-	"version": "0.1.0",
+	"version": "0.2.0",
 	"description": "Something to help find your way?",
 	"keywords": [],
 	"license": "MIT",
@@ -17,6 +17,7 @@
 	],
 	"type": "module",
 	"module": "./dist/index.mjs",
+	"sideEffects": false,
 	"types": "./dist/index.d.mts",
 	"exports": {
 		"./package.json": "./package.json",
@@ -32,7 +33,10 @@
 		"test": "npx vp test run --coverage",
 		"test:leak": "vpx vp test run --detect-async-leaks --coverage"
 	},
-	"dependencies": {},
+	"dependencies": {
+		"@oscarpalmer/atoms": "^0.204",
+		"@oscarpalmer/toretto": "^0.54"
+	},
 	"devDependencies": {
 		"@types/node": "^26.6",
 		"@vitest/coverage-istanbul": "5.0.1",
