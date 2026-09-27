@@ -3,6 +3,16 @@ import type {SYMBOL} from './constants';
 
 // #region Types
 
+export type Guard = (event: GuardEvent) => boolean;
+
+export type GuardEvent = {
+	path: string;
+	query: PlainObject;
+	route: Route;
+	router: Router;
+	values: PlainObject;
+};
+
 export type InternalRoute = {
 	[SYMBOL]: RouteState;
 } & Route;
@@ -27,7 +37,7 @@ export type RouteCallback = (event: RouterEvent) => void;
 
 export type RouteState = {
 	callback: RouteCallback;
-	router?: InternalRouter;
+	guards?: Guard[];
 	path: RouteStatePath;
 	pattern?: URLPattern;
 	specificity: number;
@@ -45,6 +55,7 @@ export type Router = {
 };
 
 export type RouterOptions = {
+	notFound?: (event: RouterEvent) => void;
 	prefix: string;
 };
 
@@ -52,16 +63,18 @@ export type RouterState = {
 	route?: Route;
 	routes: Route[];
 	type: Type;
-};
+} & RouterOptions;
 
 export type RouterEvent = {
-	router: Router;
+	path: string;
 	query: PlainObject;
+	route: Route;
+	router: Router;
 	values: PlainObject;
 };
 
 export type Storage = {
-	routers: Set<InternalRouter>;
+	router: InternalRouter;
 	routes: StorageRoutes;
 };
 

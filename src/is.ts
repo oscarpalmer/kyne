@@ -9,7 +9,7 @@ function isInstance(type: string, value: unknown): boolean {
 		typeof value === 'object' &&
 		value !== null &&
 		SYMBOL in value &&
-		((value as PlainObject)[SYMBOL] as PlainObject)?.type === type
+		((value as PlainObject)[SYMBOL] as PlainObject).type === type
 	);
 }
 

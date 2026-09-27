@@ -1,11 +1,20 @@
-import {MESSAGE_ROUTE_CALLBACK, MESSAGE_ROUTE_PATH_TYPE, SYMBOL, TYPE_ROUTE} from './constants';
-import type {InternalRoute, Route, RouteCallback} from './models';
+import {
+	MESSAGE_ROUTE_CALLBACK,
+	MESSAGE_ROUTE_GUARD_ARRAY,
+	MESSAGE_ROUTE_GUARD_TYPE,
+	MESSAGE_ROUTE_PATH_TYPE,
+	storage,
+	SYMBOL,
+	TYPE_ROUTE,
+} from './constants';
+import type {Guard, InternalRoute, Route, RouteCallback} from './models';
 
 // #region Instances
 
-function Route(this: any, path: string, callback: RouteCallback): void {
+function Route(this: any, path: string, callback: RouteCallback, guards?: Guard[]): void {
 	this[SYMBOL] = {
 		callback,
+		guards,
 		path: {
 			normalized: path,
 			original: path,
@@ -27,7 +36,7 @@ Object.defineProperties(Route.prototype, {
 // #region Functions
 
 function getRouteActive(this: InternalRoute): boolean {
-	return this[SYMBOL].router?.route === this;
+	return storage.router?.[SYMBOL].route === this;
 }
 
 function getRouteSpecificity(path: string): number {
@@ -53,7 +62,7 @@ function getRouteSpecificity(path: string): number {
 	return score;
 }
 
-export function route(path: string, callback: RouteCallback): Route {
+export function route(path: string, callback: RouteCallback, guards?: Guard[]): Route {
 	if (typeof path !== 'string') {
 		throw new TypeError(MESSAGE_ROUTE_PATH_TYPE);
 	}
@@ -62,8 +71,29 @@ export function route(path: string, callback: RouteCallback): Route {
 		throw new TypeError(MESSAGE_ROUTE_CALLBACK);
 	}
 
+	if (guards != null) {
+		validateGuards(guards);
+	}
+
 	// @ts-expect-error All good, no worries :-)
-	return new Route(path, callback) as Route;
+	return new Route(path, callback, guards) as Route;
+}
+
+function validateGuards(input: unknown): asserts input is Guard[] {
+	if (!Array.isArray(input)) {
+		throw new TypeError(MESSAGE_ROUTE_GUARD_ARRAY);
+	}
+
+	const guards = input as Guard[];
+	const {length} = guards;
+
+	for (let index = 0; index < length; index += 1) {
+		const guard = guards[index];
+
+		if (typeof guard !== 'function') {
+			throw new TypeError(MESSAGE_ROUTE_GUARD_TYPE);
+		}
+	}
 }
 
 // #endregion

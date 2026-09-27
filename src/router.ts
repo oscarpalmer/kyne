@@ -1,11 +1,14 @@
+import {sort} from '@oscarpalmer/atoms/array/sort';
 import {isPlainObject} from '@oscarpalmer/atoms/is';
 import {fromQuery} from '@oscarpalmer/atoms/query';
 import {on} from '@oscarpalmer/toretto/event';
 import {
+	MESSAGE_OPTIONS_NOT_FOUND,
+	MESSAGE_OPTIONS_PREFIX,
 	MESSAGE_PATTERN,
-	MESSAGE_ROUTE_EXISTS,
 	MESSAGE_ROUTE_PATH_EXISTS,
 	MESSAGE_ROUTE_TYPE,
+	MESSAGE_ROUTER,
 	MESSAGE_ROUTES,
 	storage,
 	SYMBOL,
@@ -14,18 +17,18 @@ import {
 import {onClick, onPopState, onRoute} from './event';
 import {normalizePath} from './helpers';
 import {isPattern, isRoute} from './is';
-import type {InternalRoute, InternalRouter, RouterOptions, Route, Router} from './models';
-import {sort} from '@oscarpalmer/atoms/array/sort';
+import type {InternalRoute, InternalRouter, Route, Router, RouterOptions} from './models';
 
 // #region Instances
 
 function Router(this: any, routes: Route[], options: RouterOptions): void {
 	this[SYMBOL] = {
+		...options,
 		routes: [],
 		type: TYPE_ROUTER,
 	};
 
-	storage.routers.add(this);
+	storage.router = this;
 
 	setRoutes(this, routes, options);
 
@@ -50,8 +53,17 @@ Object.defineProperties(Router.prototype, {
 function getOptions(input?: Partial<RouterOptions>): RouterOptions {
 	const values = isPlainObject(input) ? input : {};
 
+	if (values.prefix != null && typeof values.prefix !== 'string') {
+		throw new TypeError(MESSAGE_OPTIONS_PREFIX);
+	}
+
+	if (values.notFound != null && typeof values.notFound !== 'function') {
+		throw new TypeError(MESSAGE_OPTIONS_NOT_FOUND);
+	}
+
 	return {
-		prefix: normalizePath(typeof values.prefix === 'string' ? values.prefix : ''),
+		notFound: values.notFound,
+		prefix: normalizePath(values.prefix ?? ''),
 	};
 }
 
@@ -60,7 +72,7 @@ function getRoute(this: InternalRouter): Route | undefined {
 }
 
 function getRoutes(this: InternalRouter): Route[] {
-	return this[SYMBOL].routes;
+	return this[SYMBOL].routes.slice();
 }
 
 function initializeHistory(): void {
@@ -101,6 +113,10 @@ function initializeHistory(): void {
 }
 
 export function router(routes: Route[], options?: Partial<RouterOptions>): Router {
+	if (storage.router != null) {
+		throw new Error(MESSAGE_ROUTER);
+	}
+
 	validateRoutes(routes);
 
 	// @ts-expect-error All good, no worries :-)
@@ -130,8 +146,6 @@ function setRoutes(router: InternalRouter, routes: Route[], options: RouterOptio
 			routeState.pattern = new URLPattern({pathname: path});
 		}
 
-		routeState.router = router;
-
 		routerState.routes.push(route);
 
 		if (pathIsPattern) {
@@ -156,12 +170,6 @@ function validateRoutes(input: unknown): asserts input is Route[] {
 
 		if (!isRoute(route)) {
 			throw new TypeError(MESSAGE_ROUTE_TYPE);
-		}
-
-		const state = (route as InternalRoute)[SYMBOL];
-
-		if (state?.router != null) {
-			throw new Error(MESSAGE_ROUTE_EXISTS);
 		}
 	}
 }

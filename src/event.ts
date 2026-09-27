@@ -1,8 +1,9 @@
+import type {GenericCallback, PlainObject} from '@oscarpalmer/atoms/models';
 import {fromQuery} from '@oscarpalmer/atoms/query';
 import {findAncestor} from '@oscarpalmer/toretto';
 import {storage, SYMBOL} from './constants';
 import {normalizePath} from './helpers';
-import type {OnRouteOptions, InternalRoute, InternalRouter, RouteState} from './models';
+import type {InternalRoute, OnRouteOptions, RouteState} from './models';
 
 // #region Functions
 
@@ -22,6 +23,24 @@ export function onClick(event: Event): void {
 	});
 }
 
+function onNotFound(
+	path: string,
+	query: PlainObject,
+	search: string,
+	push: boolean,
+	event?: Event,
+): void {
+	const {router} = storage;
+
+	if (router == null || router[SYMBOL].notFound == null) {
+		return;
+	}
+
+	event?.preventDefault();
+
+	onPushState(path, {}, query, search, router[SYMBOL].notFound, push);
+}
+
 export function onPopState(event: PopStateEvent): void {
 	if ('path' in event.state) {
 		const {path, query, search} = event.state;
@@ -34,17 +53,45 @@ export function onPopState(event: PopStateEvent): void {
 	}
 }
 
+function onPushState(
+	path: string,
+	values: PlainObject,
+	query: PlainObject,
+	search: string,
+	callback: GenericCallback,
+	push: boolean,
+	route?: InternalRoute,
+): void {
+	if (push) {
+		window.history.pushState(
+			{
+				path,
+				query,
+				search,
+			},
+			'',
+			`${path}${search}`,
+		);
+	}
+
+	callback({
+		path,
+		query,
+		route,
+		values,
+		router: storage.router,
+	});
+}
+
 export function onRoute(path: string, options: OnRouteOptions): void {
 	const {keyed, patterned} = storage.routes;
 
 	let route: InternalRoute | undefined;
 	let routeState: RouteState | undefined;
-	let router: InternalRouter | undefined;
 
 	if (path in keyed) {
 		route = keyed[path];
 		routeState = route[SYMBOL];
-		router = routeState.router;
 	}
 
 	let values = {};
@@ -60,7 +107,6 @@ export function onRoute(path: string, options: OnRouteOptions): void {
 			if (match != null) {
 				route = item;
 				routeState = state;
-				router = state.router;
 				values = match.pathname.groups;
 
 				break;
@@ -68,17 +114,18 @@ export function onRoute(path: string, options: OnRouteOptions): void {
 		}
 	}
 
-	for (const instance of storage.routers) {
-		instance[SYMBOL].route = instance === router ? route : undefined;
-	}
+	const query = options.query ?? {};
+	const search = options.search ?? '';
 
-	if (route == null || routeState == null || router == null) {
+	options.event?.preventDefault();
+
+	if (route == null || routeState == null) {
+		onNotFound(path, query, search, options.push ?? true, options.event);
+
 		return;
 	}
 
 	options.event?.preventDefault();
-
-	const search = options.search ?? '';
 
 	if (
 		window.location.pathname === path &&
@@ -89,25 +136,19 @@ export function onRoute(path: string, options: OnRouteOptions): void {
 		return;
 	}
 
-	const query = options.query ?? {};
+	if (routeState.guards != null) {
+		const {length} = routeState.guards;
 
-	if (options.push ?? true) {
-		window.history.pushState(
-			{
-				path,
-				query,
-				search,
-			},
-			'',
-			`${path}${search}`,
-		);
+		for (let index = 0; index < length; index += 1) {
+			const guard = routeState.guards[index];
+
+			if (guard({path, query, route, values, router: storage.router}) === false) {
+				return;
+			}
+		}
 	}
 
-	routeState.callback({
-		router,
-		query,
-		values,
-	});
+	onPushState(path, values, query, search, routeState.callback, options.push ?? true, route);
 }
 
 // #endregion
