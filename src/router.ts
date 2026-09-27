@@ -1,44 +1,45 @@
 import {isPlainObject} from '@oscarpalmer/atoms/is';
-import type {PlainObject} from '@oscarpalmer/atoms/models';
-import {fromQuery, toQuery} from '@oscarpalmer/atoms/query';
+import {fromQuery} from '@oscarpalmer/atoms/query';
 import {on} from '@oscarpalmer/toretto/event';
-import {findAncestor} from '@oscarpalmer/toretto/find';
 import {
 	MESSAGE_PATTERN,
 	MESSAGE_ROUTE_EXISTS,
+	MESSAGE_ROUTE_PATH_EXISTS,
 	MESSAGE_ROUTE_TYPE,
 	MESSAGE_ROUTES,
+	storage,
 	SYMBOL,
+	TYPE_ROUTER,
 } from './constants';
-import type {
-	HandleRouteOptions,
-	InternalKyne,
-	Kyne,
-	Options,
-	Route,
-	Routes,
-	Storage,
-} from './models';
+import {onClick, onPopState, onRoute} from './event';
+import {normalizePath} from './helpers';
+import {isPattern, isRoute} from './is';
+import type {InternalRoute, InternalRouter, RouterOptions, Route, Router} from './models';
+import {sort} from '@oscarpalmer/atoms/array/sort';
 
 // #region Instances
 
-function Kyne(this: any, routes: Routes, options: Options): void {
+function Router(this: any, routes: Route[], options: RouterOptions): void {
 	this[SYMBOL] = {
-		paths: [],
-		patterns: [],
+		routes: [],
+		type: TYPE_ROUTER,
 	};
 
-	instances.add(this);
+	storage.routers.add(this);
 
 	setRoutes(this, routes, options);
 
 	initializeHistory();
 }
 
-Object.defineProperties(Kyne.prototype, {
+Object.defineProperties(Router.prototype, {
 	route: {
 		enumerable: true,
 		get: getRoute,
+	},
+	routes: {
+		enumerable: true,
+		get: getRoutes,
 	},
 });
 
@@ -46,7 +47,7 @@ Object.defineProperties(Kyne.prototype, {
 
 // #region Functions
 
-function getOptions(input?: Partial<Options>): Options {
+function getOptions(input?: Partial<RouterOptions>): RouterOptions {
 	const values = isPlainObject(input) ? input : {};
 
 	return {
@@ -54,106 +55,12 @@ function getOptions(input?: Partial<Options>): Options {
 	};
 }
 
-function getRoute(this: InternalKyne): Route | undefined {
+function getRoute(this: InternalRouter): Route | undefined {
 	return this[SYMBOL].route;
 }
 
-function handleClick(event: Event): void {
-	const anchor = findAncestor(event, 'a');
-
-	if (anchor == null || anchor.origin !== window.location.origin) {
-		return;
-	}
-
-	const {search} = anchor;
-
-	handleRoute(normalizePath(anchor.pathname), {
-		event,
-		search,
-		query: fromQuery(search.slice(1)),
-	});
-}
-
-function handlePopState(event: PopStateEvent): void {
-	if ('path' in event.state) {
-		const {path, query, search} = event.state;
-
-		handleRoute(normalizePath(path), {
-			push: false,
-			query: query ?? {},
-			search: search ?? '',
-		});
-	}
-}
-
-function handleRoute(path: string, options: HandleRouteOptions): void {
-	let route: Route | undefined;
-
-	if (path in storage.keyed) {
-		route = storage.keyed[path];
-	}
-
-	let values = {};
-
-	if (route == null) {
-		for (const [pattern, item] of storage.mapped) {
-			const match = pattern.exec({pathname: path});
-
-			if (match != null) {
-				route = item;
-				values = match.pathname.groups;
-
-				break;
-			}
-		}
-	}
-
-	for (const instance of instances) {
-		const state = instance[SYMBOL];
-
-		if (instance === route?.kyne) {
-			state.route = route;
-		} else {
-			state.route = undefined;
-		}
-	}
-
-	if (route == null) {
-		return;
-	}
-
-	options.event?.preventDefault();
-
-	const search = options.search ?? '';
-
-	if (
-		window.location.pathname === path &&
-		window.location.search === search &&
-		(options.push ?? true) &&
-		!(options.initial ?? false)
-	) {
-		return;
-	}
-
-	const query = options.query ?? {};
-
-	if (options.push ?? true) {
-		window.history.pushState(
-			{
-				path,
-				query,
-				search,
-			},
-			'',
-			`${path}${search}`,
-		);
-	}
-
-	route.callback({
-		values,
-		query,
-		kyne: route.kyne,
-	});
+function getRoutes(this: InternalRouter): Route[] {
+	return this[SYMBOL].routes;
 }
 
 function initializeHistory(): void {
@@ -178,14 +85,14 @@ function initializeHistory(): void {
 		`${path}${search}`,
 	);
 
-	on(document, 'click', handleClick, {
+	on(document, 'click', onClick, {
 		capture: true,
 		passive: false,
 	});
 
-	window.addEventListener('popstate', handlePopState);
+	window.addEventListener('popstate', onPopState);
 
-	handleRoute(path, {
+	onRoute(path, {
 		query,
 		search,
 		initial: true,
@@ -193,84 +100,68 @@ function initializeHistory(): void {
 	});
 }
 
-export function kyne(routes: Routes, options?: Partial<Options>): Kyne {
+export function router(routes: Route[], options?: Partial<RouterOptions>): Router {
 	validateRoutes(routes);
 
 	// @ts-expect-error All good, no worries :-)
-	return new Kyne(routes, getOptions(options)) as Kyne;
+	return new Router(routes, getOptions(options)) as Router;
 }
 
-function normalizePath(path: string): string {
-	const normalized = path.replaceAll(/(^\/+|\/+$)/g, '').replaceAll(/\/+/g, '/');
+function setRoutes(router: InternalRouter, routes: Route[], options: RouterOptions): void {
+	const routerState = router[SYMBOL];
 
-	return normalized.length === 0 ? '/' : `/${normalized}/`;
-}
-
-export function setQuery(value: string | PlainObject): void {
-	let query: PlainObject | undefined;
-	let search: string | undefined;
-
-	if (typeof value === 'string') {
-		query = fromQuery(value);
-		search = toQuery(query);
-	} else if (isPlainObject(value)) {
-		query = value;
-		search = toQuery(value);
-	}
-
-	if (query == null || search == null) {
-		return;
-	}
-
-	const path = normalizePath(window.location.pathname);
-
-	handleRoute(path, {
-		query,
-		search: `?${search}`,
-	});
-}
-
-function setRoutes(kyne: InternalKyne, input: Routes, options: Options): void {
-	const {paths, patterns} = kyne[SYMBOL];
-
-	const keys = Object.keys(input);
-	const {length} = keys;
+	const {length} = routes;
 
 	for (let index = 0; index < length; index += 1) {
-		const key = keys[index];
-		const callback = input[key];
+		const route = routes[index];
+		const routeState = (route as InternalRoute)[SYMBOL];
 
-		const path = normalizePath(`${options.prefix}${key}`);
+		const path = normalizePath(`${options.prefix}${routeState.path.original}`);
 
-		if (path in storage.keyed) {
-			throw new Error(MESSAGE_ROUTE_EXISTS.replace(MESSAGE_PATTERN, path));
+		routeState.path.normalized = path;
+
+		if (path in storage.routes.keyed) {
+			throw new Error(MESSAGE_ROUTE_PATH_EXISTS.replace(MESSAGE_PATTERN, routeState.path.original));
 		}
 
-		const pattern = new URLPattern({pathname: path});
-		const route: Route = {callback, kyne, path, pattern};
+		const pathIsPattern = isPattern(path);
 
-		paths.push(path);
-		patterns.push(pattern);
+		if (pathIsPattern) {
+			routeState.pattern = new URLPattern({pathname: path});
+		}
 
-		storage.keyed[path] = route;
-		storage.mapped.set(pattern, route);
+		routeState.router = router;
+
+		routerState.routes.push(route);
+
+		if (pathIsPattern) {
+			storage.routes.patterned.push(route);
+		} else {
+			storage.routes.keyed[path] = route;
+		}
 	}
+
+	sort(storage.routes.patterned, route => route[SYMBOL].specificity, true);
 }
 
-function validateRoutes(input: unknown): asserts input is Routes {
-	if (!isPlainObject(input)) {
+function validateRoutes(input: unknown): asserts input is Route[] {
+	if (!Array.isArray(input) || input.length === 0) {
 		throw new TypeError(MESSAGE_ROUTES);
 	}
 
-	const keys = Object.keys(input);
-	const {length} = keys;
+	const {length} = input;
 
 	for (let index = 0; index < length; index += 1) {
-		const key = keys[index];
-		const value = input[key];
+		const route = input[index];
 
-		if (typeof value !== 'function') {
-			throw new TypeError(MESSAGE_ROUTE_TYPE.replace(MESSAGE_PATTERN, key));
+		if (!isRoute(route)) {
+			throw new TypeError(MESSAGE_ROUTE_TYPE);
+		}
+
+		const state = (route as InternalRoute)[SYMBOL];
+
+		if (state?.router != null) {
+			throw new Error(MESSAGE_ROUTE_EXISTS);
 		}
 	}
 }
@@ -278,13 +169,6 @@ function validateRoutes(input: unknown): asserts input is Routes {
 // #endregion
 
 // #region Variables
-
-const instances = new Set<InternalKyne>();
-
-const storage: Storage = {
-	keyed: {},
-	mapped: new Map<URLPattern, Route>(),
-};
 
 let initialized = false;
 

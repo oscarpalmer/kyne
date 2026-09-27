@@ -1,2 +1,5 @@
-export type {Kyne as Router, Routes} from './models';
-export {kyne, setQuery} from './router';
+export {setQuery} from './helpers';
+export {isPattern, isRoute, isRouter} from './is';
+export type {Route, Router} from './models';
+export {route} from './route';
+export {router} from './router';

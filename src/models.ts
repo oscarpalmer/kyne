@@ -3,7 +3,15 @@ import type {SYMBOL} from './constants';
 
 // #region Types
 
-export type HandleRouteOptions = {
+export type InternalRoute = {
+	[SYMBOL]: RouteState;
+} & Route;
+
+export type InternalRouter = {
+	[SYMBOL]: RouterState;
+} & Router;
+
+export type OnRouteOptions = {
 	event?: Event;
 	initial?: boolean;
 	push?: boolean;
@@ -11,44 +19,57 @@ export type HandleRouteOptions = {
 	search: string;
 };
 
-export type InternalKyne = {
-	[SYMBOL]: State;
-} & Kyne;
-
-export type Kyne = {
-	get route(): Route | undefined;
+export type Route = {
+	get active(): boolean;
 };
 
-export type KyneEvent = {
-	kyne: Kyne;
+export type RouteCallback = (event: RouterEvent) => void;
+
+export type RouteState = {
+	callback: RouteCallback;
+	router?: InternalRouter;
+	path: RouteStatePath;
+	pattern?: URLPattern;
+	specificity: number;
+	type: Type;
+};
+
+export type RouteStatePath = {
+	normalized: string;
+	original: string;
+};
+
+export type Router = {
+	get route(): Route | undefined;
+	get routes(): Route[];
+};
+
+export type RouterOptions = {
+	prefix: string;
+};
+
+export type RouterState = {
+	route?: Route;
+	routes: Route[];
+	type: Type;
+};
+
+export type RouterEvent = {
+	router: Router;
 	query: PlainObject;
 	values: PlainObject;
 };
 
-export type Options = {
-	prefix: string;
-};
-
-export type Route = {
-	callback: RouteHandler;
-	kyne: InternalKyne;
-	path: string;
-	pattern: URLPattern;
-};
-
-export type RouteHandler = (event: KyneEvent) => void;
-
-export type Routes = Record<string, RouteHandler>;
-
-export type State = {
-	paths: string[];
-	patterns: URLPattern[];
-	route?: Route;
-};
-
 export type Storage = {
-	keyed: Record<string, Route>;
-	mapped: Map<URLPattern, Route>;
+	routers: Set<InternalRouter>;
+	routes: StorageRoutes;
 };
+
+type StorageRoutes = {
+	keyed: Record<string, InternalRoute>;
+	patterned: InternalRoute[];
+};
+
+export type Type = 'route' | 'router';
 
 // #endregion
