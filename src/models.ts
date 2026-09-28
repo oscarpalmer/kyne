@@ -31,9 +31,15 @@ export type OnRouteOptions = {
 
 export type Route = {
 	get active(): boolean;
+	visit(query?: string | PlainObject): void;
 };
 
 export type RouteCallback = (event: RouterEvent) => void;
+
+export type RouteQuery = {
+	parameters?: PlainObject;
+	search?: string;
+};
 
 export type RouteState = {
 	callback: RouteCallback;
@@ -74,7 +80,7 @@ export type RouterEvent = {
 };
 
 export type Storage = {
-	router: InternalRouter;
+	router?: InternalRouter;
 	routes: StorageRoutes;
 };
 

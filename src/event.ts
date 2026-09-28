@@ -3,7 +3,34 @@ import {fromQuery} from '@oscarpalmer/atoms/query';
 import {findAncestor} from '@oscarpalmer/toretto';
 import {storage, SYMBOL} from './constants';
 import {normalizePath} from './helpers';
-import type {InternalRoute, OnRouteOptions, RouteState} from './models';
+import type {InternalRoute, InternalRouter, OnRouteOptions, Route, RouteState} from './models';
+
+// #region Types
+
+type OnVisitParameters = {
+	initial?: boolean;
+	path: string;
+	push: boolean;
+	query: PlainObject;
+	route: Route;
+	router: InternalRouter;
+	search: string;
+	state: RouteState;
+	values: PlainObject;
+};
+
+type PushStateParameters = {
+	callback: GenericCallback;
+	path: string;
+	push: boolean;
+	query: PlainObject;
+	route?: InternalRoute;
+	router: InternalRouter;
+	search: string;
+	values: PlainObject;
+};
+
+// #endregion
 
 // #region Functions
 
@@ -15,12 +42,9 @@ export function onClick(event: Event): void {
 	}
 
 	const {search} = anchor;
+	const query = fromQuery(search.slice(1));
 
-	onRoute(normalizePath(anchor.pathname), {
-		event,
-		search,
-		query: fromQuery(search.slice(1)),
-	});
+	onRoute(normalizePath(anchor.pathname), {event, search, query});
 }
 
 function onNotFound(
@@ -31,14 +55,15 @@ function onNotFound(
 	event?: Event,
 ): void {
 	const {router} = storage;
+	const callback = router?.[SYMBOL].notFound;
 
-	if (router == null || router[SYMBOL].notFound == null) {
+	if (router == null || callback == null) {
 		return;
 	}
 
 	event?.preventDefault();
 
-	onPushState(path, {}, query, search, router[SYMBOL].notFound, push);
+	onPushState({callback, path, push, query, router, search, values: {}});
 }
 
 export function onPopState(event: PopStateEvent): void {
@@ -53,38 +78,28 @@ export function onPopState(event: PopStateEvent): void {
 	}
 }
 
-function onPushState(
-	path: string,
-	values: PlainObject,
-	query: PlainObject,
-	search: string,
-	callback: GenericCallback,
-	push: boolean,
-	route?: InternalRoute,
-): void {
+function onPushState(parameters: PushStateParameters): void {
+	const {callback, path, push, query, search, route, router, values} = parameters;
+
 	if (push) {
 		window.history.pushState(
-			{
-				path,
-				query,
-				search,
-			},
+			{path, query, search},
 			'',
-			`${path}${search}`,
+			`${path}${search.length === 0 ? '' : `?${search}`}`,
 		);
 	}
 
-	callback({
-		path,
-		query,
-		route,
-		values,
-		router: storage.router,
-	});
+	callback({path, query, route, router, values});
 }
 
 export function onRoute(path: string, options: OnRouteOptions): void {
-	const {keyed, patterned} = storage.routes;
+	const {router, routes} = storage;
+
+	if (router == null) {
+		return;
+	}
+
+	const {keyed, patterned} = routes;
 
 	let route: InternalRoute | undefined;
 	let routeState: RouteState | undefined;
@@ -109,46 +124,65 @@ export function onRoute(path: string, options: OnRouteOptions): void {
 				routeState = state;
 				values = match.pathname.groups;
 
+				console.log(match);
+
 				break;
 			}
 		}
 	}
 
+	const push = options.push ?? true;
 	const query = options.query ?? {};
 	const search = options.search ?? '';
 
 	options.event?.preventDefault();
 
 	if (route == null || routeState == null) {
-		onNotFound(path, query, search, options.push ?? true, options.event);
+		onNotFound(path, query, search, push, options.event);
 
 		return;
 	}
 
 	options.event?.preventDefault();
 
+	onVisit({
+		path,
+		push,
+		query,
+		route,
+		router,
+		search,
+		values,
+		initial: options.initial,
+		state: routeState,
+	});
+}
+
+export function onVisit(parameters: OnVisitParameters): void {
+	const {initial, path, push, query, route, router, search, state, values} = parameters;
+
 	if (
 		window.location.pathname === path &&
 		window.location.search === search &&
-		(options.push ?? true) &&
-		!(options.initial ?? false)
+		push &&
+		!(initial ?? false)
 	) {
 		return;
 	}
 
-	if (routeState.guards != null) {
-		const {length} = routeState.guards;
+	if (state.guards != null) {
+		const {length} = state.guards;
 
 		for (let index = 0; index < length; index += 1) {
-			const guard = routeState.guards[index];
+			const guard = state.guards[index];
 
-			if (guard({path, query, route, values, router: storage.router}) === false) {
+			if (guard({path, query, route, router, values}) === false) {
 				return;
 			}
 		}
 	}
 
-	onPushState(path, values, query, search, routeState.callback, options.push ?? true, route);
+	onPushState({path, push, query, search, route, router, values, callback: state.callback});
 }
 
 // #endregion

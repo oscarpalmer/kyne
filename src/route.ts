@@ -1,3 +1,4 @@
+import type {PlainObject} from '@oscarpalmer/atoms/models';
 import {
 	MESSAGE_ROUTE_CALLBACK,
 	MESSAGE_ROUTE_GUARD_ARRAY,
@@ -7,7 +8,9 @@ import {
 	SYMBOL,
 	TYPE_ROUTE,
 } from './constants';
+import {getPath, getQuery} from './helpers';
 import type {Guard, InternalRoute, Route, RouteCallback} from './models';
+import {onVisit} from './event';
 
 // #region Instances
 
@@ -23,6 +26,8 @@ function Route(this: any, path: string, callback: RouteCallback, guards?: Guard[
 		type: TYPE_ROUTE,
 	};
 }
+
+Route.prototype.visit = visitRoute;
 
 Object.defineProperties(Route.prototype, {
 	active: {
@@ -94,6 +99,39 @@ function validateGuards(input: unknown): asserts input is Guard[] {
 			throw new TypeError(MESSAGE_ROUTE_GUARD_TYPE);
 		}
 	}
+}
+
+function visitRoute(this: InternalRoute, values?: PlainObject, query?: string | PlainObject): void {
+	if (storage.router == null) {
+		return;
+	}
+
+	const state = this[SYMBOL];
+	const {parameters, search} = getQuery(query);
+
+	let path: string;
+	let params: PlainObject = {};
+
+	if (state.pattern == null) {
+		path = state.path.normalized;
+	} else {
+		[path, params] = getPath(state.path.normalized, values);
+
+		if (!state.pattern.test({pathname: path})) {
+			return;
+		}
+	}
+
+	onVisit({
+		path,
+		state,
+		push: true,
+		query: parameters ?? {},
+		route: this,
+		router: storage.router,
+		search: search ?? '',
+		values: params,
+	});
 }
 
 // #endregion
