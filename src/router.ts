@@ -1,9 +1,11 @@
 import {sort} from '@oscarpalmer/atoms/array/sort';
+import {herald, type HeraldEvents} from '@oscarpalmer/atoms/herald';
 import {isPlainObject} from '@oscarpalmer/atoms/is';
 import {fromQuery} from '@oscarpalmer/atoms/query';
 import {on} from '@oscarpalmer/toretto/event';
 import {
-	MESSAGE_OPTIONS_NOT_FOUND,
+	events,
+	MESSAGE_OPTIONS_ERROR,
 	MESSAGE_OPTIONS_PREFIX,
 	MESSAGE_PATTERN,
 	MESSAGE_ROUTE_PATH_EXISTS,
@@ -17,13 +19,25 @@ import {
 import {onClick, onPopState, onRoute} from './event';
 import {normalizePath} from './helpers';
 import {isPattern, isRoute} from './is';
-import type {InternalRoute, InternalRouter, Route, Router, RouterOptions} from './models';
+import type {
+	InternalRoute,
+	InternalRouter,
+	Route,
+	Router,
+	RouterEvents,
+	RouterOptions,
+} from './models';
+import type { GenericCallback } from '@oscarpalmer/atoms/models';
 
 // #region Instances
 
 function Router(this: any, routes: Route[], options: RouterOptions): void {
 	this[SYMBOL] = {
 		...options,
+		active: options.autostart,
+		herald: herald({
+			names: events,
+		}),
 		routes: [],
 		type: TYPE_ROUTER,
 	};
@@ -32,10 +46,23 @@ function Router(this: any, routes: Route[], options: RouterOptions): void {
 
 	setRoutes(this, routes, options);
 
-	initializeHistory();
+	if (options.autostart) {
+		initializeHistory();
+	}
 }
 
+Router.prototype.start = startRouter;
+Router.prototype.stop = stopRouter;
+
 Object.defineProperties(Router.prototype, {
+	active: {
+		enumerable: true,
+		get: getActive,
+	},
+	events: {
+		enumerable: true,
+		get: getEvents,
+	},
 	route: {
 		enumerable: true,
 		get: getRoute,
@@ -50,6 +77,32 @@ Object.defineProperties(Router.prototype, {
 
 // #region Functions
 
+/**
+ * Used for destroying and resetting routers during testing
+ *
+ * @internal
+ */
+export function destroyRouter(router: InternalRouter): void {
+	if (storage.router !== router) {
+		return;
+	}
+
+	initialized = false;
+
+	storage.routes.keyed = {};
+	storage.routes.patterned.splice(0);
+
+	storage.router = undefined;
+}
+
+function getActive(this: InternalRouter): boolean {
+	return this[SYMBOL].active;
+}
+
+function getEvents(this: InternalRouter): HeraldEvents<RouterEvents> {
+	return this[SYMBOL].herald.events;
+}
+
 function getOptions(input?: Partial<RouterOptions>): RouterOptions {
 	const values = isPlainObject(input) ? input : {};
 
@@ -57,12 +110,13 @@ function getOptions(input?: Partial<RouterOptions>): RouterOptions {
 		throw new TypeError(MESSAGE_OPTIONS_PREFIX);
 	}
 
-	if (values.notFound != null && typeof values.notFound !== 'function') {
-		throw new TypeError(MESSAGE_OPTIONS_NOT_FOUND);
+	if (values.error != null && typeof values.error !== 'function') {
+		throw new TypeError(MESSAGE_OPTIONS_ERROR);
 	}
 
 	return {
-		notFound: values.notFound,
+		autostart: typeof values.autostart === 'boolean' ? values.autostart : true,
+		error: values.error as GenericCallback,
 		prefix: normalizePath(values.prefix ?? ''),
 	};
 }
@@ -80,6 +134,7 @@ function initializeHistory(): void {
 		return;
 	}
 
+	count += 1;
 	initialized = true;
 
 	const {search} = window.location;
@@ -87,22 +142,24 @@ function initializeHistory(): void {
 	const path = normalizePath(window.location.pathname);
 	const query = fromQuery(search.slice(1));
 
-	window.history.pushState(
-		{
-			path,
-			query,
-			search,
-		},
-		'',
-		`${path}${search}`,
-	);
+	if (count === 1) {
+		window.history.pushState(
+			{
+				path,
+				query,
+				search,
+			},
+			'',
+			`${path}?${search}`,
+		);
 
-	on(document, 'click', onClick, {
-		capture: true,
-		passive: false,
-	});
+		on(document, 'click', onClick, {
+			capture: true,
+			passive: false,
+		});
 
-	window.addEventListener('popstate', onPopState);
+		window.addEventListener('popstate', onPopState);
+	}
 
 	onRoute(path, {
 		query,
@@ -158,6 +215,22 @@ function setRoutes(router: InternalRouter, routes: Route[], options: RouterOptio
 	sort(storage.routes.patterned, route => route[SYMBOL].specificity, true);
 }
 
+function startRouter(this: InternalRouter): void {
+	if (this[SYMBOL].active) {
+		return;
+	}
+
+	this[SYMBOL].active = true;
+
+	if (!initialized) {
+		initializeHistory();
+	}
+}
+
+function stopRouter(this: InternalRouter): void {
+	this[SYMBOL].active = false;
+}
+
 function validateRoutes(input: unknown): asserts input is Route[] {
 	if (!Array.isArray(input) || input.length === 0) {
 		throw new TypeError(MESSAGE_ROUTES);
@@ -177,6 +250,8 @@ function validateRoutes(input: unknown): asserts input is Route[] {
 // #endregion
 
 // #region Variables
+
+let count = 0;
 
 let initialized = false;
 

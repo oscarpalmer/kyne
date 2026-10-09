@@ -1,3 +1,4 @@
+import type {Herald, HeraldEvents} from '@oscarpalmer/atoms/herald';
 import type {PlainObject} from '@oscarpalmer/atoms/models';
 import type {SYMBOL} from './constants';
 
@@ -34,7 +35,7 @@ export type Route = {
 	visit(query?: string | PlainObject): void;
 };
 
-export type RouteCallback = (event: RouterEvent) => void;
+export type RouteCallback = (event: RouterChangeEvent) => void;
 
 export type RouteQuery = {
 	parameters?: PlainObject;
@@ -56,28 +57,49 @@ export type RouteStatePath = {
 };
 
 export type Router = {
+	readonly active: boolean;
+	readonly events: HeraldEvents<RouterEvents>;
 	get route(): Route | undefined;
 	get routes(): Route[];
+	start(): void;
+	stop(): void;
 };
 
-export type RouterOptions = {
-	notFound?: (event: RouterEvent) => void;
-	prefix: string;
-};
-
-export type RouterState = {
-	route?: Route;
-	routes: Route[];
-	type: Type;
-} & RouterOptions;
-
-export type RouterEvent = {
+export type RouterChangeEvent = {
 	path: string;
 	query: PlainObject;
 	route: Route;
 	router: Router;
 	values: PlainObject;
 };
+
+export type RouterErrorEvent = {
+	path: string;
+	query: PlainObject;
+	route?: Route;
+	router: Router;
+};
+
+export type RouterEventType = 'change' | 'error';
+
+export type RouterEvents = {
+	change(event: RouterChangeEvent): void;
+	error(event: RouterErrorEvent): void;
+};
+
+export type RouterOptions = {
+	autostart: boolean;
+	error: (event: RouterErrorEvent) => void;
+	prefix: string;
+};
+
+export type RouterState = {
+	active: boolean;
+	herald: Herald<RouterEvents>;
+	route?: Route;
+	routes: Route[];
+	type: Type;
+} & RouterOptions;
 
 export type Storage = {
 	router?: InternalRouter;

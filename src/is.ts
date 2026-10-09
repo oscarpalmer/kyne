@@ -13,7 +13,7 @@ function isInstance(type: string, value: unknown): boolean {
 	);
 }
 
-export function isPattern(value: string): boolean {
+export function isPattern(value: unknown): boolean {
 	return typeof value === 'string' && EXPRESSION_URL_PATTERNS.some(pattern => pattern.test(value));
 }
 

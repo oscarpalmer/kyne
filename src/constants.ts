@@ -1,4 +1,4 @@
-import type {InternalRouter, Storage, Type} from './models';
+import type {InternalRouter, RouterEventType, Storage, Type} from './models';
 
 // #region Variables
 
@@ -19,7 +19,7 @@ export const EXPRESSION_URL_PATTERNS: RegExp[] = [
 	/:[\w]+[?+*]/,
 ];
 
-export const MESSAGE_OPTIONS_NOT_FOUND = 'Not found-handler must be a function.';
+export const MESSAGE_OPTIONS_ERROR = 'Error handler must be a function.';
 
 export const MESSAGE_OPTIONS_PREFIX = 'Router prefix must be a string.';
 
@@ -46,6 +46,8 @@ export const SYMBOL: symbol = Symbol('kyne');
 export const TYPE_ROUTE: Type = 'route';
 
 export const TYPE_ROUTER: Type = 'router';
+
+export const events: RouterEventType[] = ['change', 'error'];
 
 export const instances: Set<InternalRouter> = new Set();
 

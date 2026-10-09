@@ -1,9 +1,17 @@
-import type {GenericCallback, PlainObject} from '@oscarpalmer/atoms/models';
+import type {PlainObject} from '@oscarpalmer/atoms/models';
 import {fromQuery} from '@oscarpalmer/atoms/query';
 import {findAncestor} from '@oscarpalmer/toretto';
 import {storage, SYMBOL} from './constants';
 import {normalizePath} from './helpers';
-import type {InternalRoute, InternalRouter, OnRouteOptions, Route, RouteState} from './models';
+import type {
+	InternalRoute,
+	InternalRouter,
+	OnRouteOptions,
+	Route,
+	RouteCallback,
+	RouterErrorEvent,
+	RouteState,
+} from './models';
 
 // #region Types
 
@@ -20,7 +28,8 @@ type OnVisitParameters = {
 };
 
 type PushStateParameters = {
-	callback: GenericCallback;
+	callback: ((event: RouterErrorEvent) => void) | RouteCallback;
+	error?: boolean;
 	path: string;
 	push: boolean;
 	query: PlainObject;
@@ -47,7 +56,7 @@ export function onClick(event: Event): void {
 	onRoute(normalizePath(anchor.pathname), {event, search, query});
 }
 
-function onNotFound(
+function onError(
 	path: string,
 	query: PlainObject,
 	search: string,
@@ -55,7 +64,7 @@ function onNotFound(
 	event?: Event,
 ): void {
 	const {router} = storage;
-	const callback = router?.[SYMBOL].notFound;
+	const callback = router?.[SYMBOL].error;
 
 	if (router == null || callback == null) {
 		return;
@@ -63,7 +72,16 @@ function onNotFound(
 
 	event?.preventDefault();
 
-	onPushState({callback, path, push, query, router, search, values: {}});
+	onPushState({
+		callback,
+		path,
+		push,
+		query,
+		router,
+		search,
+		error: true,
+		values: {},
+	});
 }
 
 export function onPopState(event: PopStateEvent): void {
@@ -79,7 +97,7 @@ export function onPopState(event: PopStateEvent): void {
 }
 
 function onPushState(parameters: PushStateParameters): void {
-	const {callback, path, push, query, search, route, router, values} = parameters;
+	const {callback, error, path, push, query, search, route, router, values} = parameters;
 
 	if (push) {
 		window.history.pushState(
@@ -89,13 +107,27 @@ function onPushState(parameters: PushStateParameters): void {
 		);
 	}
 
-	callback({path, query, route, router, values});
+	const event = {path, query, route, router, values};
+
+	callback(event as never);
+
+	router[SYMBOL].herald.emit('change', event as never);
+
+	if (error ?? false) {
+		router[SYMBOL].herald.emit('error', event);
+	}
 }
 
 export function onRoute(path: string, options: OnRouteOptions): void {
 	const {router, routes} = storage;
 
 	if (router == null) {
+		return;
+	}
+
+	if (!router.active) {
+		options.event?.preventDefault();
+
 		return;
 	}
 
@@ -124,8 +156,6 @@ export function onRoute(path: string, options: OnRouteOptions): void {
 				routeState = state;
 				values = match.pathname.groups;
 
-				console.log(match);
-
 				break;
 			}
 		}
@@ -138,7 +168,7 @@ export function onRoute(path: string, options: OnRouteOptions): void {
 	options.event?.preventDefault();
 
 	if (route == null || routeState == null) {
-		onNotFound(path, query, search, push, options.event);
+		onError(path, query, search, push, options.event);
 
 		return;
 	}
@@ -182,7 +212,16 @@ export function onVisit(parameters: OnVisitParameters): void {
 		}
 	}
 
-	onPushState({path, push, query, search, route, router, values, callback: state.callback});
+	onPushState({
+		path,
+		push,
+		query,
+		search,
+		route,
+		router,
+		values,
+		callback: state.callback,
+	});
 }
 
 // #endregion

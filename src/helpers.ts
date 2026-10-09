@@ -73,14 +73,17 @@ function visit(query?: string | PlainObject, path?: string): void {
 		search = '';
 	}
 
+	
 	if (parameters != null && search != null) {
 		const normalizedPath = normalizePath(
 			path == null ? window.location.pathname : `${storage.router[SYMBOL].prefix}${path}`,
 		);
+		
+		console.log(normalizedPath);
 
 		onRoute(normalizedPath, {
+			search,
 			query: parameters,
-			search: search.length > 0 ? `?${search}` : '',
 		});
 	}
 }

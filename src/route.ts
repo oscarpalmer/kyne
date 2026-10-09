@@ -102,7 +102,7 @@ function validateGuards(input: unknown): asserts input is Guard[] {
 }
 
 function visitRoute(this: InternalRoute, values?: PlainObject, query?: string | PlainObject): void {
-	if (storage.router == null) {
+	if (storage.router == null || !storage.router.active) {
 		return;
 	}
 
