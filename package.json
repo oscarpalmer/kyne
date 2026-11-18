@@ -1,6 +1,6 @@
 {
 	"name": "@oscarpalmer/kyne",
-	"version": "0.3.0",
+	"version": "0.4.0",
 	"description": "Something to help find your way?",
 	"keywords": [],
 	"license": "MIT",
@@ -30,32 +30,22 @@
 		"tsdown:build": "vpx tsdown -c ./tsdown.config.ts",
 		"tsdown:watch": "vpx tsdown -c ./tsdown.config.ts --watch",
 		"test": "npx vp test run --coverage",
-		"test:leak": "vpx vp test run --detect-async-leaks --coverage"
+		"test:leak": "vpx vp test run --detect-async-leaks --coverage",
+		"www": "concurrently \"php -S localhost:3000\" \"vp run tsdown:watch\""
 	},
 	"dependencies": {
-		"@oscarpalmer/atoms": "^0.212",
-		"@oscarpalmer/toretto": "^0.55"
+		"@oscarpalmer/atoms": "^0.226",
+		"@oscarpalmer/toretto": "^0.59"
 	},
 	"devDependencies": {
 		"@oscarpalmer/abydon": "^0.25",
-		"@oscarpalmer/oui": "^0.38",
+		"@oscarpalmer/oui": "^0.44",
 		"@types/node": "^26.6",
-		"@vitest/coverage-istanbul": "5.0.1",
-		"jsdom": "^30.1",
+		"@vitest/coverage-istanbul": "5.1.0",
+		"concurrently": "^10",
+		"jsdom": "^31",
+		"tsdown": "^0.23",
 		"typescript": "^7",
-		"vite": "npm:@voidzero-dev/vite-plus-core@1.0.0",
-		"vite-plus": "1.0.0",
-		"vitest": "5.0.1"
-	},
-	"overrides": {
-		"vite": "npm:@voidzero-dev/vite-plus-core@1.0.0",
-		"vitest": "5.0.1"
-	},
-	"devEngines": {
-		"packageManager": {
-			"name": "npm",
-			"version": "11.19.1",
-			"onFail": "download"
-		}
+		"vite-plus": "^1.7"
 	}
 }

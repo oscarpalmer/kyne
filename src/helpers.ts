@@ -1,11 +1,45 @@
 import {isPlainObject} from '@oscarpalmer/atoms/is';
-import type {PlainObject} from '@oscarpalmer/atoms/models';
+import type {GenericCallback, PlainObject} from '@oscarpalmer/atoms/models';
 import {fromQuery, toQuery} from '@oscarpalmer/atoms/query';
-import {EXPRESSION_NORMALIZE_INSIDE, EXPRESSION_NORMALIZE_TRIM, storage, SYMBOL} from './constants';
+import {
+	CHARACTER_ASTERISK,
+	CHARACTER_SLASH,
+	EXPRESSION_INTEGER_PREFIX_PATTERN,
+	EXPRESSION_INTEGER_PREFIX_REPLACEMENT,
+	EXPRESSION_NORMALIZE_INSIDE,
+	MESSAGE_OPTIONS_AUTOSTART,
+	MESSAGE_OPTIONS_ERROR,
+	MESSAGE_OPTIONS_PREFIX,
+	SYMBOL,
+	TRIM_SLASH,
+} from './constants';
 import {onRoute} from './event';
-import type {RouteQuery} from './models';
+import type {RouteQuery, RouterOptions} from './models';
+import {internalRouter} from './router';
 
 // #region Functions
+
+export function getOptions(input?: Partial<RouterOptions>): RouterOptions {
+	const values = isPlainObject(input) ? input : {};
+
+	if (values.autostart != null && typeof values.autostart !== 'boolean') {
+		throw new TypeError(MESSAGE_OPTIONS_AUTOSTART);
+	}
+
+	if (values.prefix != null && typeof values.prefix !== 'string') {
+		throw new TypeError(MESSAGE_OPTIONS_PREFIX);
+	}
+
+	if (values.error != null && typeof values.error !== 'function') {
+		throw new TypeError(MESSAGE_OPTIONS_ERROR);
+	}
+
+	return {
+		autostart: typeof values.autostart === 'boolean' ? values.autostart : true,
+		error: values.error as GenericCallback,
+		prefix: normalizePath(values.prefix ?? ''),
+	};
+}
 
 export function getPath(pattern: string, input?: PlainObject): [string, PlainObject] {
 	const values = isPlainObject(input) ? input : {};
@@ -18,8 +52,8 @@ export function getPath(pattern: string, input?: PlainObject): [string, PlainObj
 		const key = keys[index];
 		const value = values[key];
 
-		if (/^\d+/.test(key)) {
-			path = path.replace(/\*|\(.*?\)/, String(value));
+		if (key === CHARACTER_ASTERISK || EXPRESSION_INTEGER_PREFIX_PATTERN.test(key)) {
+			path = path.replace(EXPRESSION_INTEGER_PREFIX_REPLACEMENT, String(value));
 		} else {
 			path = path.replace(`:${key}`, String(value));
 		}
@@ -43,12 +77,35 @@ export function getQuery(value?: string | PlainObject): RouteQuery {
 	return {parameters, search};
 }
 
-export function normalizePath(path: string): string {
-	const normalized = path
-		.replaceAll(EXPRESSION_NORMALIZE_TRIM, '')
-		.replaceAll(EXPRESSION_NORMALIZE_INSIDE, '/');
+export function normalizePath(path: string, removeWildcards?: boolean): string {
+	let normalized = path;
 
-	return normalized.length === 0 ? '/' : `/${normalized}/`;
+	if (removeWildcards ?? false) {
+		normalized = normalized.replaceAll(CHARACTER_ASTERISK, '');
+	}
+
+	normalized = normalizeSlashes(normalized);
+
+	return normalized.length === 0
+		? CHARACTER_SLASH
+		: `${CHARACTER_SLASH}${normalized}${CHARACTER_SLASH}`;
+}
+
+function normalizeSlashes(path: string): string {
+	let start = 0;
+	let end = path.length;
+
+	while (start < end && path.codePointAt(start) === TRIM_SLASH) {
+		start += 1;
+	}
+
+	while (end > start && path.codePointAt(end - 1) === TRIM_SLASH) {
+		end -= 1;
+	}
+
+	const trimmed = start === 0 && end === path.length ? path : path.slice(start, end);
+
+	return trimmed.replaceAll(EXPRESSION_NORMALIZE_INSIDE, CHARACTER_SLASH);
 }
 
 export function redirect(path: string, query?: string | PlainObject): void {
@@ -62,10 +119,6 @@ export function setQuery(query: string | PlainObject): void {
 }
 
 function visit(query?: string | PlainObject, path?: string): void {
-	if (storage.router == null) {
-		return;
-	}
-
 	let {parameters, search} = getQuery(query);
 
 	if (parameters == null && path != null) {
@@ -73,13 +126,10 @@ function visit(query?: string | PlainObject, path?: string): void {
 		search = '';
 	}
 
-	
 	if (parameters != null && search != null) {
 		const normalizedPath = normalizePath(
-			path == null ? window.location.pathname : `${storage.router[SYMBOL].prefix}${path}`,
+			path == null ? window.location.pathname : `${internalRouter[SYMBOL].options.prefix}${path}`,
 		);
-		
-		console.log(normalizedPath);
 
 		onRoute(normalizedPath, {
 			search,

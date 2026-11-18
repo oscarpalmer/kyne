@@ -26,16 +26,26 @@ export type OnRouteOptions = {
 	event?: Event;
 	initial?: boolean;
 	push?: boolean;
-	query: PlainObject;
-	search: string;
+	query?: PlainObject;
+	search?: string;
 };
 
 export type Route = {
 	get active(): boolean;
+
+	toJSON(): RouteData;
+
+	visit(values: PlainObject, query?: string | PlainObject): void;
 	visit(query?: string | PlainObject): void;
+	visit(): void;
 };
 
 export type RouteCallback = (event: RouterChangeEvent) => void;
+
+export type RouteData = {
+	active: boolean;
+	path: RouteStatePath;
+};
 
 export type RouteQuery = {
 	parameters?: PlainObject;
@@ -58,10 +68,17 @@ export type RouteStatePath = {
 
 export type Router = {
 	readonly active: boolean;
+
 	readonly events: HeraldEvents<RouterEvents>;
+
 	get route(): Route | undefined;
+
 	get routes(): Route[];
+
+	set(routes: Route[], options?: Partial<RouterOptions>): void;
+
 	start(): void;
+
 	stop(): void;
 };
 
@@ -96,17 +113,13 @@ export type RouterOptions = {
 export type RouterState = {
 	active: boolean;
 	herald: Herald<RouterEvents>;
+	options: RouterOptions;
 	route?: Route;
 	routes: Route[];
 	type: Type;
-} & RouterOptions;
-
-export type Storage = {
-	router?: InternalRouter;
-	routes: StorageRoutes;
 };
 
-type StorageRoutes = {
+export type StoredRoutes = {
 	keyed: Record<string, InternalRoute>;
 	patterned: InternalRoute[];
 };

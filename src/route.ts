@@ -1,16 +1,20 @@
 import type {PlainObject} from '@oscarpalmer/atoms/models';
 import {
+	CHARACTER_ASTERISK,
+	CHARACTER_COLON,
+	CHARACTER_SLASH,
+	EXPRESSION_INVALID_PATH,
 	MESSAGE_ROUTE_CALLBACK,
 	MESSAGE_ROUTE_GUARD_ARRAY,
 	MESSAGE_ROUTE_GUARD_TYPE,
 	MESSAGE_ROUTE_PATH_TYPE,
-	storage,
 	SYMBOL,
 	TYPE_ROUTE,
 } from './constants';
-import {getPath, getQuery} from './helpers';
-import type {Guard, InternalRoute, Route, RouteCallback} from './models';
 import {onVisit} from './event';
+import {getPath, getQuery, normalizePath} from './helpers';
+import type {Guard, InternalRoute, Route, RouteCallback, RouteData} from './models';
+import {internalRouter} from './router';
 
 // #region Instances
 
@@ -27,6 +31,7 @@ function Route(this: any, path: string, callback: RouteCallback, guards?: Guard[
 	};
 }
 
+Route.prototype.toJSON = toJson;
 Route.prototype.visit = visitRoute;
 
 Object.defineProperties(Route.prototype, {
@@ -41,11 +46,11 @@ Object.defineProperties(Route.prototype, {
 // #region Functions
 
 function getRouteActive(this: InternalRoute): boolean {
-	return storage.router?.[SYMBOL].route === this;
+	return internalRouter.route === this;
 }
 
 function getRouteSpecificity(path: string): number {
-	const parts = path.split('/');
+	const parts = path.split(CHARACTER_SLASH);
 	const {length} = parts;
 
 	let score = 0;
@@ -53,14 +58,14 @@ function getRouteSpecificity(path: string): number {
 	for (let index = 0; index < length; index += 1) {
 		const part = parts[index];
 
-		if (part === '' || part === '/') {
+		if (part === '' || part === CHARACTER_SLASH) {
 			continue;
 		}
 
-		if (part.startsWith(':')) {
+		if (part.startsWith(CHARACTER_COLON)) {
 			score += 10;
 		} else {
-			score += part === '*' ? 1 : 100;
+			score += part === CHARACTER_ASTERISK ? 1 : 100;
 		}
 	}
 
@@ -84,6 +89,15 @@ export function route(path: string, callback: RouteCallback, guards?: Guard[]): 
 	return new Route(path, callback, guards) as Route;
 }
 
+function toJson(this: InternalRoute): RouteData {
+	const state = this[SYMBOL];
+
+	return {
+		active: getRouteActive.call(this),
+		path: {...state.path},
+	};
+}
+
 function validateGuards(input: unknown): asserts input is Guard[] {
 	if (!Array.isArray(input)) {
 		throw new TypeError(MESSAGE_ROUTE_GUARD_ARRAY);
@@ -102,7 +116,7 @@ function validateGuards(input: unknown): asserts input is Guard[] {
 }
 
 function visitRoute(this: InternalRoute, values?: PlainObject, query?: string | PlainObject): void {
-	if (storage.router == null || !storage.router.active) {
+	if (!internalRouter.active) {
 		return;
 	}
 
@@ -117,18 +131,17 @@ function visitRoute(this: InternalRoute, values?: PlainObject, query?: string | 
 	} else {
 		[path, params] = getPath(state.path.normalized, values);
 
-		if (!state.pattern.test({pathname: path})) {
+		if (EXPRESSION_INVALID_PATH.test(path) || !state.pattern.test({pathname: path})) {
 			return;
 		}
 	}
 
 	onVisit({
-		path,
 		state,
+		path: normalizePath(path, true),
 		push: true,
 		query: parameters ?? {},
 		route: this,
-		router: storage.router,
 		search: search ?? '',
 		values: params,
 	});

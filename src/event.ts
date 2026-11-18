@@ -1,17 +1,23 @@
 import type {PlainObject} from '@oscarpalmer/atoms/models';
 import {fromQuery} from '@oscarpalmer/atoms/query';
 import {findAncestor} from '@oscarpalmer/toretto';
-import {storage, SYMBOL} from './constants';
+import {
+	EVENT_CHANGE,
+	EVENT_ERROR,
+	PROPERTY_PATH,
+	storedRoutes,
+	SYMBOL,
+	TAG_ANCHOR,
+} from './constants';
 import {normalizePath} from './helpers';
 import type {
 	InternalRoute,
-	InternalRouter,
 	OnRouteOptions,
-	Route,
 	RouteCallback,
 	RouterErrorEvent,
 	RouteState,
 } from './models';
+import {internalRouter, router} from './router';
 
 // #region Types
 
@@ -20,8 +26,7 @@ type OnVisitParameters = {
 	path: string;
 	push: boolean;
 	query: PlainObject;
-	route: Route;
-	router: InternalRouter;
+	route: InternalRoute;
 	search: string;
 	state: RouteState;
 	values: PlainObject;
@@ -34,7 +39,6 @@ type PushStateParameters = {
 	push: boolean;
 	query: PlainObject;
 	route?: InternalRoute;
-	router: InternalRouter;
 	search: string;
 	values: PlainObject;
 };
@@ -44,9 +48,9 @@ type PushStateParameters = {
 // #region Functions
 
 export function onClick(event: Event): void {
-	const anchor = findAncestor(event, 'a');
+	const anchor = findAncestor(event, TAG_ANCHOR);
 
-	if (anchor == null || anchor.origin !== window.location.origin) {
+	if (anchor?.origin !== window.location.origin) {
 		return;
 	}
 
@@ -63,12 +67,13 @@ function onError(
 	push: boolean,
 	event?: Event,
 ): void {
-	const {router} = storage;
-	const callback = router?.[SYMBOL].error;
+	const callback = internalRouter[SYMBOL].options.error;
 
-	if (router == null || callback == null) {
+	if (callback == null) {
 		return;
 	}
+
+	internalRouter[SYMBOL].route = undefined;
 
 	event?.preventDefault();
 
@@ -77,7 +82,6 @@ function onError(
 		path,
 		push,
 		query,
-		router,
 		search,
 		error: true,
 		values: {},
@@ -85,7 +89,7 @@ function onError(
 }
 
 export function onPopState(event: PopStateEvent): void {
-	if ('path' in event.state) {
+	if (event.state != null && PROPERTY_PATH in event.state) {
 		const {path, query, search} = event.state;
 
 		onRoute(normalizePath(path), {
@@ -97,41 +101,37 @@ export function onPopState(event: PopStateEvent): void {
 }
 
 function onPushState(parameters: PushStateParameters): void {
-	const {callback, error, path, push, query, search, route, router, values} = parameters;
+	const {callback, error, path, push, query, search, route, values} = parameters;
 
 	if (push) {
-		window.history.pushState(
-			{path, query, search},
-			'',
-			`${path}${search.length === 0 ? '' : `?${search}`}`,
-		);
+		const suffix = search.length === 0 ? '' : `?${search}`;
+
+		window.history.pushState({path, query, search}, '', `${path}${suffix}`);
 	}
 
 	const event = {path, query, route, router, values};
 
 	callback(event as never);
 
-	router[SYMBOL].herald.emit('change', event as never);
+	internalRouter[SYMBOL].herald.emit(EVENT_CHANGE, event as never);
 
 	if (error ?? false) {
-		router[SYMBOL].herald.emit('error', event);
+		internalRouter[SYMBOL].herald.emit(EVENT_ERROR, event);
 	}
 }
 
 export function onRoute(path: string, options: OnRouteOptions): void {
-	const {router, routes} = storage;
+	const routerState = internalRouter[SYMBOL];
 
-	if (router == null) {
-		return;
-	}
-
-	if (!router.active) {
+	if (!routerState.active) {
 		options.event?.preventDefault();
 
+		routerState.route = undefined;
+
 		return;
 	}
 
-	const {keyed, patterned} = routes;
+	const {keyed, patterned} = storedRoutes;
 
 	let route: InternalRoute | undefined;
 	let routeState: RouteState | undefined;
@@ -180,7 +180,6 @@ export function onRoute(path: string, options: OnRouteOptions): void {
 		push,
 		query,
 		route,
-		router,
 		search,
 		values,
 		initial: options.initial,
@@ -189,7 +188,7 @@ export function onRoute(path: string, options: OnRouteOptions): void {
 }
 
 export function onVisit(parameters: OnVisitParameters): void {
-	const {initial, path, push, query, route, router, search, state, values} = parameters;
+	const {initial, path, push, query, route, search, state, values} = parameters;
 
 	if (
 		window.location.pathname === path &&
@@ -212,13 +211,14 @@ export function onVisit(parameters: OnVisitParameters): void {
 		}
 	}
 
+	internalRouter[SYMBOL].route = route;
+
 	onPushState({
 		path,
 		push,
 		query,
 		search,
 		route,
-		router,
 		values,
 		callback: state.callback,
 	});

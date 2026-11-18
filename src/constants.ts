@@ -1,23 +1,37 @@
-import type {InternalRouter, RouterEventType, Storage, Type} from './models';
+import type {RouterEventType, StoredRoutes, Type} from './models';
 
 // #region Variables
 
-export const EXPRESSION_NORMALIZE_INSIDE: RegExp = /\/+/g;
+export const CHARACTER_ASTERISK = '*';
 
-export const EXPRESSION_NORMALIZE_TRIM: RegExp = /(^\/+|\/+$)/g;
+export const CHARACTER_COLON = ':';
+
+export const CHARACTER_SLASH = '/';
+
+export const EXPRESSION_INTEGER_PREFIX_PATTERN: RegExp = /^\d+/;
+
+export const EXPRESSION_INTEGER_PREFIX_REPLACEMENT: RegExp = /\*|\([^()]*\)/;
+
+export const EXPRESSION_INVALID_PATH: RegExp = /(:|\([^()]*\))/;
+
+export const EXPRESSION_NORMALIZE_INSIDE: RegExp = /\/+/g;
 
 export const EXPRESSION_URL_PATTERNS: RegExp[] = [
 	// Named groups
-	/:[\w]+/,
+	/:\w/,
 	// Wildcards
 	/\*/,
 	// Pattern groups
-	/(?<!\\)\(.*\)/,
+	/(?<!\\)\([^()]*\)/,
 	// Group delimiters with modifiers
-	/\{.*\}[?+*]/,
-	// Group modifiers
-	/:[\w]+[?+*]/,
+	/\{[^{}]*\}[?+*]/,
 ];
+
+export const EVENT_CHANGE = 'change';
+
+export const EVENT_ERROR = 'error';
+
+export const MESSAGE_OPTIONS_AUTOSTART = 'Autostart option must be a boolean.';
 
 export const MESSAGE_OPTIONS_ERROR = 'Error handler must be a function.';
 
@@ -37,26 +51,27 @@ export const MESSAGE_ROUTE_PATH_TYPE = 'Route path must be a string.';
 
 export const MESSAGE_ROUTE_TYPE = 'Route must be a Route.';
 
-export const MESSAGE_ROUTER = 'A router has already been defined.';
+export const MESSAGE_ROUTE_VALUES = 'Route wildcard(s) must be specified.';
 
 export const MESSAGE_ROUTES = 'Routes must be an array of routes';
 
-export const SYMBOL: symbol = Symbol('kyne');
+export const PROPERTY_PATH = 'path';
+
+export const SYMBOL: unique symbol = Symbol('kyne');
+
+export const TAG_ANCHOR = 'a';
+
+export const TRIM_SLASH = CHARACTER_SLASH.codePointAt(0) as number;
 
 export const TYPE_ROUTE: Type = 'route';
 
 export const TYPE_ROUTER: Type = 'router';
 
-export const events: RouterEventType[] = ['change', 'error'];
+export const events: RouterEventType[] = [EVENT_CHANGE, EVENT_ERROR];
 
-export const instances: Set<InternalRouter> = new Set();
-
-export const storage: Storage = {
-	routes: {
-		keyed: {},
-		patterned: [],
-	},
-	router: undefined as never,
+export const storedRoutes: StoredRoutes = {
+	keyed: {},
+	patterned: [],
 };
 
 // #endregion
